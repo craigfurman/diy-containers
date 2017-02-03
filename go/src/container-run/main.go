@@ -55,7 +55,7 @@ func child() {
 	rootFS := os.Args[2]
 	cores := os.Args[3]
 
-	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE, ""))
+	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE, "remount"))
 	must(os.MkdirAll(filepath.Join(rootFS, "oldrootfs"), 0700))
 	must(syscall.Mount(rootFS, rootFS, "", syscall.MS_BIND, ""))
 	must(os.Chdir(rootFS))
