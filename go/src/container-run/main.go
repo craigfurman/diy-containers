@@ -1,27 +1,34 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 )
 
 func main() {
 	switch os.Args[1] {
-	case "run":
-		parent()
 	case "child":
 		child()
 	default:
-		panic("wat")
+		parent()
 	}
 }
 
 func parent() {
-	cmd := exec.Command("/proc/self/exe", append([]string{"child"}, os.Args[2:]...)...)
+	rootFS := flag.String("rootFS", "", "rootFS")
+	flag.Parse()
+	if *rootFS == "" {
+		fmt.Println("must set -rootFS")
+		os.Exit(1)
+	}
+
+	cmd := exec.Command("/proc/self/exe", append([]string{"child", *rootFS}, flag.Args()...)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUTS,
+		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS,
 	}
 
 	cmd.Stdin = os.Stdin
@@ -38,7 +45,15 @@ func parent() {
 }
 
 func child() {
-	cmd := exec.Command(os.Args[2], os.Args[3:]...)
+	rootFS := os.Args[2]
+	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE, ""))
+	must(os.MkdirAll(filepath.Join(rootFS, "oldrootfs"), 0700))
+	must(syscall.Mount(rootFS, rootFS, "", syscall.MS_BIND, ""))
+	must(os.Chdir(rootFS))
+	must(syscall.PivotRoot(".", "oldrootfs"))
+	must(os.Chdir("/"))
+
+	cmd := exec.Command(os.Args[3], os.Args[4:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
