@@ -64,6 +64,7 @@ func child() {
 	must(syscall.Mount("", "/proc", "proc", 0, ""))
 	must(syscall.Unmount("/oldrootfs", syscall.MNT_DETACH))
 
+	must(os.MkdirAll("/sys/fs/cgroup", 0700))
 	must(syscall.Mount("cgroup_root", "/sys/fs/cgroup", "tmpfs", 0, ""))
 	must(os.MkdirAll("/sys/fs/cgroup/cpuset", 0700))
 	must(syscall.Mount("cpuset", "/sys/fs/cgroup/cpuset", "cgroup", 0, "cpuset"))
