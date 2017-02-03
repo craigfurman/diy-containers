@@ -28,7 +28,11 @@ func parent() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Println("ERROR", err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.Sys().(syscall.WaitStatus).ExitStatus())
+		}
+
+		fmt.Println("ERROR running container", err)
 		os.Exit(1)
 	}
 }
@@ -40,7 +44,12 @@ func child() {
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		fmt.Println(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			fmt.Println(err)
+			os.Exit(exitErr.Sys().(syscall.WaitStatus).ExitStatus())
+		}
+
+		fmt.Println("ERROR running process in container", err)
 		os.Exit(1)
 	}
 }
