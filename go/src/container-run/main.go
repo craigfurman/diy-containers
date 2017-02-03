@@ -52,6 +52,8 @@ func child() {
 	must(os.Chdir(rootFS))
 	must(syscall.PivotRoot(".", "oldrootfs"))
 	must(os.Chdir("/"))
+	must(syscall.Mount("", "/proc", "proc", 0, ""))
+	must(syscall.Unmount("/oldrootfs", syscall.MNT_DETACH))
 
 	cmd := exec.Command(os.Args[3], os.Args[4:]...)
 	cmd.Stdin = os.Stdin
