@@ -23,6 +23,7 @@ func main() {
 func parent() {
 	rootFS := flag.String("rootFS", "", "rootFS")
 	coresToUse := flag.String("cores", "", "OPTIONAL: which cores to use? examples: '0', or '0-1'")
+	maxMemoryToUse := flag.Int64("maxMemory", 0, "OPTIONAL: max memory in MB")
 	flag.Parse()
 	if *rootFS == "" {
 		fmt.Println("must set -rootFS")
@@ -32,8 +33,12 @@ func parent() {
 	if *coresToUse != "" {
 		cores = *coresToUse
 	}
+	maxMemory := "9223372036854775807"
+	if *maxMemoryToUse != 0 {
+		maxMemory = fmt.Sprintf("%d", *maxMemoryToUse*1024*1024)
+	}
 
-	cmd := exec.Command("/proc/self/exe", append([]string{"child", *rootFS, cores}, flag.Args()...)...)
+	cmd := exec.Command("/proc/self/exe", append([]string{"child", *rootFS, cores, maxMemory}, flag.Args()...)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS,
 	}
@@ -54,6 +59,7 @@ func parent() {
 func child() {
 	rootFS := os.Args[2]
 	cores := os.Args[3]
+	maxMemory := os.Args[4]
 
 	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE, "remount"))
 	must(os.MkdirAll(filepath.Join(rootFS, "oldrootfs"), 0700))
@@ -66,6 +72,7 @@ func child() {
 
 	must(os.MkdirAll("/sys/fs/cgroup", 0700))
 	must(syscall.Mount("cgroup_root", "/sys/fs/cgroup", "tmpfs", 0, ""))
+
 	must(os.MkdirAll("/sys/fs/cgroup/cpuset", 0700))
 	must(syscall.Mount("cpuset", "/sys/fs/cgroup/cpuset", "cgroup", 0, "cpuset"))
 	must(os.MkdirAll("/sys/fs/cgroup/cpuset/container", 0700))
@@ -73,7 +80,13 @@ func child() {
 	must(ioutil.WriteFile("/sys/fs/cgroup/cpuset/container/cpuset.cpus", []byte(cores), 0600))
 	must(ioutil.WriteFile("/sys/fs/cgroup/cpuset/container/tasks", []byte(fmt.Sprintf("%d", os.Getpid())), 0600))
 
-	cmd := exec.Command(os.Args[4], os.Args[5:]...)
+	must(os.MkdirAll("/sys/fs/cgroup/memory", 0700))
+	must(syscall.Mount("memory", "/sys/fs/cgroup/memory", "cgroup", 0, "memory"))
+	must(os.MkdirAll("/sys/fs/cgroup/memory/container", 0700))
+	must(ioutil.WriteFile("/sys/fs/cgroup/memory/container/memory.limit_in_bytes", []byte(maxMemory), 0600))
+	must(ioutil.WriteFile("/sys/fs/cgroup/memory/container/tasks", []byte(fmt.Sprintf("%d", os.Getpid())), 0600))
+
+	cmd := exec.Command(os.Args[5], os.Args[6:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
