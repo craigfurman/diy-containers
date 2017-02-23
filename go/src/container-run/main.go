@@ -47,10 +47,10 @@ func outer() {
 func inner() {
 	rootFS := os.Args[1]
 
-	must(os.MkdirAll(filepath.Join(rootFS, "oldrootfs"), 0700))
+	oldRootFS := filepath.Join(rootFS, "oldrootfs")
+	must(os.MkdirAll(oldRootFS, 0700))
 	must(syscall.Mount(rootFS, rootFS, "", syscall.MS_BIND, ""))
-	must(os.Chdir(rootFS))
-	must(syscall.PivotRoot(".", "oldrootfs"))
+	must(syscall.PivotRoot(rootFS, oldRootFS))
 	must(os.Chdir("/"))
 	must(syscall.Mount("proc", "/proc", "proc", 0, ""))
 	must(syscall.Unmount("/oldrootfs", syscall.MNT_DETACH))
