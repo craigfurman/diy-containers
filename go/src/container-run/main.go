@@ -3,90 +3,59 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"syscall"
 )
 
 func main() {
-	switch os.Args[1] {
-	case "child":
-		child()
-	default:
-		parent()
+	if os.Args[0] == "/proc/self/exe" {
+		inner()
+	} else {
+		outer()
 	}
 }
 
-func parent() {
+func outer() {
 	rootFS := flag.String("rootFS", "", "rootFS")
-	coresToUse := flag.String("cores", "", "OPTIONAL: which cores to use? examples: '0', or '0-1'")
-	maxMemoryToUse := flag.Int64("maxMemory", 0, "OPTIONAL: max memory in MB")
 	flag.Parse()
 	if *rootFS == "" {
 		fmt.Println("must set -rootFS")
 		os.Exit(1)
 	}
-	cores := fmt.Sprintf("0-%d", runtime.NumCPU()-1)
-	if *coresToUse != "" {
-		cores = *coresToUse
-	}
-	maxMemory := "9223372036854775807"
-	if *maxMemoryToUse != 0 {
-		maxMemory = fmt.Sprintf("%d", *maxMemoryToUse*1024*1024)
-	}
 
-	cmd := exec.Command("/proc/self/exe", append([]string{"child", *rootFS, cores, maxMemory}, flag.Args()...)...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS,
-	}
+	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "remount"))
 
+	cmd := exec.Command("/proc/self/exe", append([]string{*rootFS}, flag.Args()...)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS | syscall.CLONE_NEWPID,
+	}
+
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			os.Exit(exitErr.Sys().(syscall.WaitStatus).ExitStatus())
 		}
 
-		fmt.Println("ERROR running container", err)
-		os.Exit(1)
+		must(err)
 	}
 }
 
-func child() {
-	rootFS := os.Args[2]
-	cores := os.Args[3]
-	maxMemory := os.Args[4]
+func inner() {
+	rootFS := os.Args[1]
 
-	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE, "remount"))
 	must(os.MkdirAll(filepath.Join(rootFS, "oldrootfs"), 0700))
 	must(syscall.Mount(rootFS, rootFS, "", syscall.MS_BIND, ""))
 	must(os.Chdir(rootFS))
 	must(syscall.PivotRoot(".", "oldrootfs"))
 	must(os.Chdir("/"))
-	must(syscall.Mount("", "/proc", "proc", 0, ""))
+	must(syscall.Mount("proc", "/proc", "proc", 0, ""))
 	must(syscall.Unmount("/oldrootfs", syscall.MNT_DETACH))
 
-	must(os.MkdirAll("/sys/fs/cgroup", 0700))
-	must(syscall.Mount("cgroup_root", "/sys/fs/cgroup", "tmpfs", 0, ""))
-
-	must(os.MkdirAll("/sys/fs/cgroup/cpuset", 0700))
-	must(syscall.Mount("cpuset", "/sys/fs/cgroup/cpuset", "cgroup", 0, "cpuset"))
-	must(os.MkdirAll("/sys/fs/cgroup/cpuset/container", 0700))
-	must(ioutil.WriteFile("/sys/fs/cgroup/cpuset/container/cpuset.mems", []byte("0"), 0600))
-	must(ioutil.WriteFile("/sys/fs/cgroup/cpuset/container/cpuset.cpus", []byte(cores), 0600))
-	must(ioutil.WriteFile("/sys/fs/cgroup/cpuset/container/tasks", []byte(fmt.Sprintf("%d", os.Getpid())), 0600))
-
-	must(os.MkdirAll("/sys/fs/cgroup/memory", 0700))
-	must(syscall.Mount("memory", "/sys/fs/cgroup/memory", "cgroup", 0, "memory"))
-	must(os.MkdirAll("/sys/fs/cgroup/memory/container", 0700))
-	must(ioutil.WriteFile("/sys/fs/cgroup/memory/container/memory.limit_in_bytes", []byte(maxMemory), 0600))
-	must(ioutil.WriteFile("/sys/fs/cgroup/memory/container/tasks", []byte(fmt.Sprintf("%d", os.Getpid())), 0600))
-
-	cmd := exec.Command(os.Args[5], os.Args[6:]...)
+	cmd := exec.Command(os.Args[2], os.Args[3:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -97,8 +66,7 @@ func child() {
 			os.Exit(exitErr.Sys().(syscall.WaitStatus).ExitStatus())
 		}
 
-		fmt.Println("ERROR running process in container", err)
-		os.Exit(1)
+		must(err)
 	}
 }
 
