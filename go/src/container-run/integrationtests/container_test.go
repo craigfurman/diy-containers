@@ -52,6 +52,10 @@ var _ = Describe("containerising processes", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
 		Expect(stdout).To(Equal("new-hostname\n"))
+		exitStatus, stdout, err = runCommandInVM("hostname")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exitStatus).To(Equal(0))
+		Expect(stdout).To(Equal("ubuntu-xenial\n"))
 	})
 
 	It("runs the process in a PID namespace", func() {
