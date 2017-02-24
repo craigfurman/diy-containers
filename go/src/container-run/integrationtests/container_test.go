@@ -47,7 +47,7 @@ var _ = Describe("containerising processes", func() {
 		Expect(vmDir).NotTo(BeEmpty())
 	})
 
-	It("puts the process in a UTS namespace", func() {
+	It("runs the process in a UTS namespace", func() {
 		exitStatus, stdout, err := runCommandInContainer("bash", "-c", "hostname new-hostname && hostname")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
