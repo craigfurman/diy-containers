@@ -54,6 +54,13 @@ var _ = Describe("containerising processes", func() {
 		Expect(stdout).To(Equal("new-hostname\n"))
 	})
 
+	It("runs the process in a PID namespace", func() {
+		exitStatus, stdout, err := runCommandInContainer("ps", "-lfp", "1")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exitStatus).To(Equal(0))
+		Expect(stdout).To(ContainSubstring("/proc/self/exe /root/rootfs/jessie ps -lfp 1"))
+	})
+
 	It("runs the process with a Debian rootFS", func() {
 		exitStatus, stdout, err := runCommandInContainer("cat", "/etc/os-release")
 		Expect(err).NotTo(HaveOccurred())
