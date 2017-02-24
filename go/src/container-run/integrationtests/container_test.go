@@ -53,4 +53,11 @@ var _ = Describe("containerising processes", func() {
 		Expect(exitStatus).To(Equal(0))
 		Expect(stdout).To(Equal("new-hostname\n"))
 	})
+
+	It("runs the process with a Debian rootFS", func() {
+		exitStatus, stdout, err := runCommandInContainer("cat", "/etc/os-release")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exitStatus).To(Equal(0))
+		Expect(stdout).To(ContainSubstring("Debian GNU/Linux 8 (jessie)"))
+	})
 })
