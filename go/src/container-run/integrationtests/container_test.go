@@ -65,6 +65,17 @@ var _ = Describe("containerising processes", func() {
 		Expect(stdout).To(ContainSubstring("/proc/self/exe /root/rootfs/jessie ps -lfp 1"))
 	})
 
+	It("runs the process in a mount namespace", func() {
+		exitStatus, stdout, err := runCommandInContainer("bash", "-c", "mount -t tmpfs tmpfs /tmp && cat /proc/self/mounts")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exitStatus).To(Equal(0))
+		Expect(stdout).To(ContainSubstring("tmpfs /tmp"))
+		exitStatus, stdout, err = runCommandInVM("cat /proc/self/mounts")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exitStatus).To(Equal(0))
+		Expect(stdout).NotTo(ContainSubstring("tmpfs /tmp"))
+	})
+
 	It("runs the process with a Debian rootFS", func() {
 		exitStatus, stdout, err := runCommandInContainer("cat", "/etc/os-release")
 		Expect(err).NotTo(HaveOccurred())
