@@ -19,6 +19,7 @@
     - exuberant-ctags
     - git
     - htop
+    - libncurses5-dev
     - neovim
     - python-dev
     - python-pip
@@ -56,21 +57,21 @@
     unarchive: copy=no src={{downloads_dir}}/tmux-2.3.tar.gz dest={{downloads_dir}} creates={{downloads_dir}}/tmux-2.3
 
   - name: check tmux installed
-    command: which tmux
-    register: tmux_installed
-    failed_when: tmux_installed.rc > 1
+    command: tmux -V
+    register: tmux_version
+    failed_when: tmux_version.rc != 0 and tmux_version.rc != 127
 
   - name: configure tmux
     command: ./configure chdir={{downloads_dir}}/tmux-2.3
-    when: tmux_installed.rc != 0
+    when: tmux_version.stdout != "tmux 2.3"
 
   - name: compile tmux
     make: chdir={{downloads_dir}}/tmux-2.3
-    when: tmux_installed.rc != 0
+    when: tmux_version.stdout != "tmux 2.3"
 
   - name: install tmux
     make: target=install chdir={{downloads_dir}}/tmux-2.3
-    when: tmux_installed.rc != 0
+    when: tmux_version.stdout != "tmux 2.3"
 
   - name: copy tmux.conf
     copy: src=vm/tmux.conf dest=~/.tmux.conf mode=0600 force=yes
