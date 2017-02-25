@@ -47,6 +47,9 @@
   - name: copy zshrc
     copy: src=vm/zshrc dest=~/.zshrc mode=0600 force=yes
 
+  - name: copy git config
+    copy: src=vm/gitconfig dest=~/.gitconfig mode=0600 force=yes
+
   - name: ensure downloads directory exists
     file: path={{downloads_dir}} state=directory
 
