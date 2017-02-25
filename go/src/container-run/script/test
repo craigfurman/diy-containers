@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -eu
+
+ginkgo -r -p -nodes 8 -randomizeAllSpecs -randomizeSuites $@

@@ -1,10 +1,8 @@
-package integrationtests_test
+package integrationtests
 
 import (
 	"bytes"
-	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"syscall"
 
@@ -13,46 +11,12 @@ import (
 )
 
 var _ = Describe("containerising processes", func() {
-	var (
-		vmDir string
-	)
-
-	runCommandInVM := func(shellCmd string) (int, string, error) {
-		containerCmd := exec.Command("vagrant", "ssh", "-c", shellCmd)
-		containerCmd.Dir = vmDir
-		var stdout bytes.Buffer
-		containerCmd.Stdout = io.MultiWriter(&stdout, GinkgoWriter)
-		containerCmd.Stderr = GinkgoWriter
-		if err := containerCmd.Run(); err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				return exitErr.Sys().(syscall.WaitStatus).ExitStatus(), stdout.String(), nil
-			}
-
-			return 0, "", err
-		}
-
-		return 0, stdout.String(), nil
-	}
-
-	runCommandInContainer := func(containerCmd ...string) (int, string, error) {
-		shellCmd := "sudo /go/bin/linux_amd64/container-run -rootFS /root/rootfs/jessie"
-		for _, term := range containerCmd {
-			shellCmd = fmt.Sprintf("%s '%s'", shellCmd, term)
-		}
-		return runCommandInVM(shellCmd)
-	}
-
-	BeforeEach(func() {
-		vmDir = os.Getenv("VM_DIR")
-		Expect(vmDir).NotTo(BeEmpty())
-	})
-
 	It("runs the process in a UTS namespace", func() {
 		exitStatus, stdout, err := runCommandInContainer("bash", "-c", "hostname new-hostname && hostname")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
 		Expect(stdout).To(Equal("new-hostname\n"))
-		exitStatus, stdout, err = runCommandInVM("hostname")
+		exitStatus, stdout, err = runCommand("hostname")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
 		Expect(stdout).To(Equal("ubuntu-xenial\n"))
@@ -70,7 +34,7 @@ var _ = Describe("containerising processes", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
 		Expect(stdout).To(ContainSubstring("tmpfs /tmp"))
-		exitStatus, stdout, err = runCommandInVM("cat /proc/self/mounts")
+		exitStatus, stdout, err = runCommand("cat", "/proc/self/mounts")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
 		Expect(stdout).NotTo(ContainSubstring("tmpfs /tmp"))
@@ -83,3 +47,25 @@ var _ = Describe("containerising processes", func() {
 		Expect(stdout).To(ContainSubstring("Debian GNU/Linux 8 (jessie)"))
 	})
 })
+
+func runCommand(exe string, args ...string) (int, string, error) {
+	cmd := exec.Command(exe, args...)
+	var stdout bytes.Buffer
+	cmd.Stdout = io.MultiWriter(&stdout, GinkgoWriter)
+	cmd.Stderr = GinkgoWriter
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitStatus := exitErr.Sys().(syscall.WaitStatus).ExitStatus()
+			return exitStatus, stdout.String(), nil
+		}
+
+		return 0, "", err
+	}
+
+	return 0, stdout.String(), nil
+}
+
+func runCommandInContainer(containerCmd ...string) (int, string, error) {
+	args := append([]string{"-rootFS", "/root/rootfs/jessie"}, containerCmd...)
+	return runCommand(containerRunBinPath, args...)
+}
