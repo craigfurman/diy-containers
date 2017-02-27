@@ -26,6 +26,7 @@
     - python-pip
     - python3-dev
     - python3-pip
+    - ruby
     - silversearcher-ag
     - tree
     - wget
@@ -90,7 +91,7 @@
     file: path=~/git-apps state=directory
 
   - name: checkout direnv
-    git: repo=https://github.com/direnv/direnv dest=~/git-apps/direnv
+    git: repo=https://github.com/direnv/direnv dest=~/git-apps/direnv force=yes
 
   - name: install direnv
     make: target=install chdir=~/git-apps/direnv
