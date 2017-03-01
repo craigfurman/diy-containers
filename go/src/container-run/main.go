@@ -21,6 +21,7 @@ func main() {
 
 func outer() {
 	rootFS := flag.String("rootFS", "", "rootFS")
+	privileged := flag.Bool("privileged", false, "if true, user namespace is not used")
 	flag.Parse()
 	if *rootFS == "" {
 		fmt.Println("must set -rootFS")
@@ -32,7 +33,13 @@ func outer() {
 	defer func() {
 		must(os.RemoveAll(cowRootFS))
 	}()
-	must(createUniqueRootFS(*rootFS, cowRootFS))
+
+	mappingSize := 100000
+	chownTo := mappingSize
+	if *privileged {
+		chownTo = 0
+	}
+	must(createUniqueRootFS(*rootFS, cowRootFS, chownTo))
 
 	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "remount"))
 
@@ -40,8 +47,27 @@ func outer() {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS | syscall.CLONE_NEWPID,
+	}
+	if !*privileged {
+		cmd.SysProcAttr.Cloneflags = cmd.SysProcAttr.Cloneflags | syscall.CLONE_NEWUSER
+		mapping := []syscall.SysProcIDMap{
+			{
+				ContainerID: 0,
+				HostID:      mappingSize,
+				Size:        1,
+			},
+			{
+				ContainerID: 1,
+				HostID:      1,
+				Size:        mappingSize - 1,
+			},
+		}
+		cmd.SysProcAttr.UidMappings = mapping
+		cmd.SysProcAttr.GidMappings = mapping
+		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 0, Gid: 0}
 	}
 
 	if err := cmd.Run(); err != nil {
@@ -79,7 +105,7 @@ func inner() {
 	}
 }
 
-func createUniqueRootFS(rootFS, cowRootFS string) error {
+func createUniqueRootFS(rootFS, cowRootFS string, chownTo int) error {
 	return filepath.Walk(rootFS, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -92,7 +118,10 @@ func createUniqueRootFS(rootFS, cowRootFS string) error {
 		newPath := filepath.Join(cowRootFS, relativePath)
 
 		if info.IsDir() {
-			return os.MkdirAll(newPath, info.Mode())
+			if err := os.MkdirAll(newPath, info.Mode()); err != nil {
+				return err
+			}
+			return os.Lchown(newPath, chownTo, chownTo)
 		}
 
 		if info.Mode()&os.ModeSymlink != 0 {
@@ -100,7 +129,10 @@ func createUniqueRootFS(rootFS, cowRootFS string) error {
 			if err != nil {
 				return err
 			}
-			return os.Symlink(linkTarget, newPath)
+			if err := os.Symlink(linkTarget, newPath); err != nil {
+				return err
+			}
+			return os.Lchown(newPath, chownTo, chownTo)
 		}
 
 		if info.Mode()&os.ModeDevice != 0 {
@@ -122,7 +154,7 @@ func createUniqueRootFS(rootFS, cowRootFS string) error {
 			return err
 		}
 
-		return nil
+		return os.Lchown(newPath, chownTo, chownTo)
 	})
 }
 
