@@ -46,15 +46,6 @@ var _ = Describe("containerising processes", func() {
 		Expect(exitStatus).To(Equal(0))
 		Expect(stdout).To(ContainSubstring("Debian GNU/Linux 8 (jessie)"))
 	})
-
-	It("runs the process in a unique rootFS", func() {
-		exitStatus, _, err := runCommandInContainer("touch", "/tmp/a-file")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(exitStatus).To(Equal(0))
-		exitStatus, _, err = runCommandInContainer("stat", "/tmp/a-file")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(exitStatus).To(Equal(1))
-	})
 })
 
 func runCommand(exe string, args ...string) (int, string, error) {

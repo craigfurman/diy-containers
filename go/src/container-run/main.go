@@ -3,8 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,11 +13,11 @@ func main() {
 	if os.Args[0] == "/proc/self/exe" {
 		inner()
 	} else {
-		outer()
+		os.Exit(outer())
 	}
 }
 
-func outer() {
+func outer() int {
 	rootFS := flag.String("rootFS", "", "rootFS")
 	flag.Parse()
 	if *rootFS == "" {
@@ -27,16 +25,9 @@ func outer() {
 		os.Exit(1)
 	}
 
-	cowRootFS, err := ioutil.TempDir("", "container-run")
-	must(err)
-	defer func() {
-		must(os.RemoveAll(cowRootFS))
-	}()
-	must(createUniqueRootFS(*rootFS, cowRootFS))
-
 	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "remount"))
 
-	cmd := exec.Command("/proc/self/exe", append([]string{cowRootFS}, flag.Args()...)...)
+	cmd := exec.Command("/proc/self/exe", append([]string{*rootFS}, flag.Args()...)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -46,11 +37,13 @@ func outer() {
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitErr.Sys().(syscall.WaitStatus).ExitStatus())
+			return exitErr.Sys().(syscall.WaitStatus).ExitStatus()
 		}
 
 		must(err)
 	}
+
+	return 0
 }
 
 func inner() {
@@ -77,53 +70,6 @@ func inner() {
 
 		must(err)
 	}
-}
-
-func createUniqueRootFS(rootFS, cowRootFS string) error {
-	return filepath.Walk(rootFS, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		relativePath, err := filepath.Rel(rootFS, path)
-		if err != nil {
-			return err
-		}
-		newPath := filepath.Join(cowRootFS, relativePath)
-
-		if info.IsDir() {
-			return os.MkdirAll(newPath, info.Mode())
-		}
-
-		if info.Mode()&os.ModeSymlink != 0 {
-			linkTarget, err := os.Readlink(path)
-			if err != nil {
-				return err
-			}
-			return os.Symlink(linkTarget, newPath)
-		}
-
-		if info.Mode()&os.ModeDevice != 0 {
-			// Don't bother setting up devices for the container
-			return nil
-		}
-
-		originalFile, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer originalFile.Close()
-		newFile, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY, info.Mode())
-		if err != nil {
-			return err
-		}
-		defer newFile.Close()
-		if _, err := io.Copy(newFile, originalFile); err != nil {
-			return err
-		}
-
-		return nil
-	})
 }
 
 func must(err error) {
