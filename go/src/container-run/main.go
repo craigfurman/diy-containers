@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -15,35 +14,37 @@ func main() {
 	if os.Args[0] == "/proc/self/exe" {
 		inner()
 	} else {
-		outer()
+		os.Exit(outer())
 	}
 }
 
-func outer() {
+func outer() int {
 	rootFS := flag.String("rootFS", "", "rootFS")
 	privileged := flag.Bool("privileged", false, "if true, user namespace is not used")
 	flag.Parse()
 	if *rootFS == "" {
 		fmt.Println("must set -rootFS")
-		os.Exit(1)
+		return 1
 	}
 
 	cowRootFS, err := ioutil.TempDir("", "container-run")
 	must(err)
-	defer func() {
-		must(os.RemoveAll(cowRootFS))
-	}()
 
 	mappingSize := 100000
 	chownTo := mappingSize
 	if *privileged {
 		chownTo = 0
 	}
-	must(createUniqueRootFS(*rootFS, cowRootFS, chownTo))
+	containerRootFSPath, err := createUniqueRootFS(*rootFS, cowRootFS, chownTo)
+	must(err)
+	defer func() {
+		must(syscall.Unmount(containerRootFSPath, 0))
+		must(os.RemoveAll(cowRootFS))
+	}()
 
 	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "remount"))
 
-	cmd := exec.Command("/proc/self/exe", append([]string{cowRootFS}, flag.Args()...)...)
+	cmd := exec.Command("/proc/self/exe", append([]string{containerRootFSPath}, flag.Args()...)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -72,11 +73,13 @@ func outer() {
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitErr.Sys().(syscall.WaitStatus).ExitStatus())
+			return exitErr.Sys().(syscall.WaitStatus).ExitStatus()
 		}
 
 		must(err)
 	}
+
+	return 0
 }
 
 func inner() {
@@ -105,57 +108,20 @@ func inner() {
 	}
 }
 
-func createUniqueRootFS(rootFS, cowRootFS string, chownTo int) error {
-	return filepath.Walk(rootFS, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+func createUniqueRootFS(rootFS, cowRootFS string, chownTo int) (string, error) {
+	containerRootFS := filepath.Join(cowRootFS, "union")
+	workDir := filepath.Join(cowRootFS, "work")
+	upperDir := filepath.Join(cowRootFS, "upper")
+	for _, dir := range []string{containerRootFS, workDir, upperDir} {
+		if err := os.Mkdir(dir, 0700); err != nil {
+			return "", err
 		}
-
-		relativePath, err := filepath.Rel(rootFS, path)
-		if err != nil {
-			return err
-		}
-		newPath := filepath.Join(cowRootFS, relativePath)
-
-		if info.IsDir() {
-			if err := os.MkdirAll(newPath, info.Mode()); err != nil {
-				return err
-			}
-			return os.Lchown(newPath, chownTo, chownTo)
-		}
-
-		if info.Mode()&os.ModeSymlink != 0 {
-			linkTarget, err := os.Readlink(path)
-			if err != nil {
-				return err
-			}
-			if err := os.Symlink(linkTarget, newPath); err != nil {
-				return err
-			}
-			return os.Lchown(newPath, chownTo, chownTo)
-		}
-
-		if info.Mode()&os.ModeDevice != 0 {
-			// Don't bother setting up devices for the container
-			return nil
-		}
-
-		originalFile, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer originalFile.Close()
-		newFile, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY, info.Mode())
-		if err != nil {
-			return err
-		}
-		defer newFile.Close()
-		if _, err := io.Copy(newFile, originalFile); err != nil {
-			return err
-		}
-
-		return os.Lchown(newPath, chownTo, chownTo)
-	})
+	}
+	overlayMountOpts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", rootFS, upperDir, workDir)
+	if err := syscall.Mount("overlay", containerRootFS, "overlay", 0, overlayMountOpts); err != nil {
+		return "", err
+	}
+	return containerRootFS, nil
 }
 
 func must(err error) {
