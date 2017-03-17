@@ -62,7 +62,7 @@ var _ = Describe("containerising processes", func() {
 		Expect(exitStatus).To(Equal(0))
 	})
 
-	PIt("cannot make mknod system calls when unprivileged", func() {
+	It("cannot make mknod system calls when unprivileged", func() {
 		exitStatus, output, err := runCommandInContainer(false, "mknod", "/tmp/node", "b", "7", "0")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).NotTo(Equal(0))
