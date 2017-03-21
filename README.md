@@ -7,7 +7,8 @@ Contains code from https://www.infoq.com/articles/build-a-container-golang.
 
 1. memory restriction through cgroups
 1. what other cgroups would be good to use?
-1. ipc namespace?
+1. ipc namespace
+1. network namespace (with outbound internet access)
 
 ## Notes
 
