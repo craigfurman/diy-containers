@@ -91,10 +91,10 @@
     file: path=~/git-apps state=directory
 
   - name: checkout direnv
-    git: repo=https://github.com/direnv/direnv dest=~/git-apps/direnv force=yes
+    git: repo=https://github.com/direnv/direnv dest={{downloads_dir}}/direnv force=yes
 
   - name: install direnv
-    make: target=install chdir=~/git-apps/direnv
+    make: target=install chdir={{downloads_dir}}/direnv
     environment:
       PATH: /usr/local/go/bin:{{ ansible_env.PATH }}
 
