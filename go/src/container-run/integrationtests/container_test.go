@@ -12,7 +12,7 @@ import (
 
 var _ = Describe("containerising processes", func() {
 	It("runs the process in a UTS namespace", func() {
-		exitStatus, output, err := runCommandInContainer(true, "bash", "-c", "hostname new-hostname && hostname")
+		exitStatus, output, err := runCommandInContainer(true, "/bin/bash", "-c", "hostname new-hostname && hostname")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
 		Expect(output).To(Equal("new-hostname\n"))
@@ -23,14 +23,14 @@ var _ = Describe("containerising processes", func() {
 	})
 
 	It("runs the process in a PID namespace", func() {
-		exitStatus, output, err := runCommandInContainer(true, "ps", "-lfp", "1")
+		exitStatus, output, err := runCommandInContainer(true, "/bin/ps", "-lfp", "1")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
 		Expect(output).To(ContainSubstring("ps -lfp 1"))
 	})
 
 	It("runs the process in a mount namespace", func() {
-		exitStatus, output, err := runCommandInContainer(true, "bash", "-c", "mount -t tmpfs tmpfs /tmp && cat /proc/self/mounts")
+		exitStatus, output, err := runCommandInContainer(true, "/bin/bash", "-c", "mount -t tmpfs tmpfs /tmp && cat /proc/self/mounts")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
 		Expect(output).To(ContainSubstring("tmpfs /tmp"))
@@ -41,29 +41,29 @@ var _ = Describe("containerising processes", func() {
 	})
 
 	It("runs the process with a Debian rootFS", func() {
-		exitStatus, output, err := runCommandInContainer(true, "cat", "/etc/os-release")
+		exitStatus, output, err := runCommandInContainer(true, "/bin/cat", "/etc/os-release")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
 		Expect(output).To(ContainSubstring("Debian GNU/Linux 8 (jessie)"))
 	})
 
 	It("runs the process in a unique rootFS", func() {
-		exitStatus, _, err := runCommandInContainer(true, "touch", "/tmp/a-file")
+		exitStatus, _, err := runCommandInContainer(true, "/usr/bin/touch", "/tmp/a-file")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
-		exitStatus, _, err = runCommandInContainer(true, "stat", "/tmp/a-file")
+		exitStatus, _, err = runCommandInContainer(true, "/usr/bin/stat", "/tmp/a-file")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(1))
 	})
 
 	It("can make mknod system calls when privileged", func() {
-		exitStatus, _, err := runCommandInContainer(true, "mknod", "/tmp/node", "b", "7", "0")
+		exitStatus, _, err := runCommandInContainer(true, "/bin/mknod", "/tmp/node", "b", "7", "0")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
 	})
 
 	It("cannot make mknod system calls when unprivileged", func() {
-		exitStatus, output, err := runCommandInContainer(false, "mknod", "/tmp/node", "b", "7", "0")
+		exitStatus, output, err := runCommandInContainer(false, "/bin/mknod", "/tmp/node", "b", "7", "0")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).NotTo(Equal(0))
 		Expect(output).To(ContainSubstring("mknod: '/tmp/node': Operation not permitted"))

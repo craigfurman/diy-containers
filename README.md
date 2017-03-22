@@ -5,6 +5,7 @@ Contains code from https://www.infoq.com/articles/build-a-container-golang.
 
 ## TODO
 
+1. search $PATH for executables
 1. memory restriction through cgroups
 1. what other cgroups would be good to use?
 1. ipc namespace

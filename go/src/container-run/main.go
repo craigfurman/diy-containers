@@ -95,19 +95,7 @@ func inner() {
 	must(syscall.Unmount("/oldrootfs", syscall.MNT_DETACH))
 	must(os.Remove("/oldrootfs"))
 
-	cmd := exec.Command(os.Args[2], os.Args[3:]...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			fmt.Println(err)
-			os.Exit(exitErr.Sys().(syscall.WaitStatus).ExitStatus())
-		}
-
-		must(err)
-	}
+	must(syscall.Exec(os.Args[2], os.Args[2:], os.Environ()))
 }
 
 func createUniqueRootFS(rootFS, cowRootFS string, chownTo int) (string, error) {
