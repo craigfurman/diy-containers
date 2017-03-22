@@ -93,6 +93,7 @@ func inner() {
 	must(os.Chdir("/"))
 	must(syscall.Mount("proc", "/proc", "proc", 0, ""))
 	must(syscall.Unmount("/oldrootfs", syscall.MNT_DETACH))
+	must(os.Remove("/oldrootfs"))
 
 	cmd := exec.Command(os.Args[2], os.Args[3:]...)
 	cmd.Stdin = os.Stdin
