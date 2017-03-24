@@ -45,14 +45,19 @@ func outer() int {
 
 	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "remount"))
 
+	syncR, syncW, err := os.Pipe()
+	must(err)
+	defer syncW.Close()
+
 	cmd := exec.Command("/proc/self/exe", append([]string{containerRootFSPath}, flag.Args()...)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS | syscall.CLONE_NEWPID,
 	}
+	cmd.ExtraFiles = []*os.File{syncR}
+
 	if !*privileged {
 		cmd.SysProcAttr.Cloneflags = cmd.SysProcAttr.Cloneflags | syscall.CLONE_NEWUSER
 		mapping := []syscall.SysProcIDMap{
@@ -72,7 +77,12 @@ func outer() int {
 		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: 0, Gid: 0}
 	}
 
-	if err := cmd.Run(); err != nil {
+	must(cmd.Start())
+	syncR.Close()
+	_, err = syncW.Write([]byte{0})
+	must(err)
+
+	if err := cmd.Wait(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.Sys().(syscall.WaitStatus).ExitStatus()
 		}
@@ -94,6 +104,11 @@ func inner() {
 	must(syscall.Mount("proc", "/proc", "proc", 0, ""))
 	must(syscall.Unmount("/oldrootfs", syscall.MNT_DETACH))
 	must(os.Remove("/oldrootfs"))
+
+	syncR := os.NewFile(3, "sync")
+	_, err := syncR.Read(make([]byte, 1))
+	must(err)
+	syncR.Close()
 
 	must(syscall.Exec(os.Args[2], os.Args[2:], os.Environ()))
 }
