@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
-set -eu
+set -euo pipefail
+
+if [ ! -d ~/rootfs/jessie ]; then
+  mkdir -p ~/rootfs/jessie
+  debootstrap --include stress jessie ~/rootfs/jessie
+fi
+
+if ! which ginkgo >/dev/null 2>&1; then
+  (
+  cd ~
+  go get -v github.com/onsi/ginkgo/ginkgo
+  )
+fi
 
 ginkgo -r -p -nodes 8 -randomizeAllSpecs -randomizeSuites $@
