@@ -8,7 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
+)
+
+const (
+	memoryCgroupRoot        = "/sys/fs/cgroup/memory"
+	cgroupMaxMemoryFileName = "memory.limit_in_bytes"
 )
 
 func main() {
@@ -22,27 +29,44 @@ func main() {
 func outer() int {
 	rootFS := flag.String("rootFS", "", "rootFS")
 	privileged := flag.Bool("privileged", false, "if true, user namespace is not used")
+	maxMemoryMB := flag.Uint64("maxMemoryMB", 0, "max memory for container in MB")
 	flag.Parse()
 	if *rootFS == "" {
 		fmt.Println("must set -rootFS")
 		return 1
 	}
 
+	maxMemoryB := *maxMemoryMB * 1024 * 1024
+	if maxMemoryB == 0 {
+		var err error
+		maxMemoryB, err = systemMaxMemoryB()
+		must(err)
+	}
+
 	cowRootFS, err := ioutil.TempDir("", "container-run")
 	must(err)
+	containerID := filepath.Base(cowRootFS)
 
-	mappingSize := 100000
-	chownTo := mappingSize
+	containerMemoryCgroupDir, err := setupMemoryCgroup(containerID, maxMemoryB)
+	must(err)
+	defer func() {
+		must(os.Remove(containerMemoryCgroupDir))
+	}()
+
+	containerRootUid := 100000
+	chownRootfsTo := containerRootUid
 	if *privileged {
-		chownTo = 0
+		chownRootfsTo = 0
 	}
-	containerRootFSPath, err := createUniqueRootFS(*rootFS, cowRootFS, chownTo)
+	containerRootFSPath, err := createUniqueRootFS(*rootFS, cowRootFS, chownRootfsTo)
 	must(err)
 	defer func() {
 		must(syscall.Unmount(containerRootFSPath, 0))
 		must(os.RemoveAll(cowRootFS))
 	}()
 
+	// Avoid any mount points propagating into container namespaces
+	// Needed on distros that use systemd (pretty much everything)
 	must(syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "remount"))
 
 	syncR, syncW, err := os.Pipe()
@@ -63,13 +87,13 @@ func outer() int {
 		mapping := []syscall.SysProcIDMap{
 			{
 				ContainerID: 0,
-				HostID:      mappingSize,
+				HostID:      containerRootUid,
 				Size:        1,
 			},
 			{
 				ContainerID: 1,
 				HostID:      1,
-				Size:        mappingSize - 1,
+				Size:        containerRootUid - 1,
 			},
 		}
 		cmd.SysProcAttr.UidMappings = mapping
@@ -79,6 +103,9 @@ func outer() int {
 
 	must(cmd.Start())
 	syncR.Close()
+
+	must(writeFile(filepath.Join(containerMemoryCgroupDir, "cgroup.procs"), cmd.Process.Pid))
+
 	_, err = syncW.Write([]byte{0})
 	must(err)
 
@@ -225,6 +252,35 @@ func createUnprivilegedRootFS(rootFS string, uid int) (string, error) {
 func mountOverlay(lowerDir, upperDir, workDir, unionDir string) error {
 	overlayMountOpts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDir, upperDir, workDir)
 	return syscall.Mount("overlay", unionDir, "overlay", 0, overlayMountOpts)
+}
+
+func setupMemoryCgroup(containerID string, maxMemoryB uint64) (string, error) {
+	containerMemoryCgroupDir := filepath.Join(memoryCgroupRoot, containerID)
+	if err := os.Mkdir(containerMemoryCgroupDir, 0700); err != nil {
+		return "", err
+	}
+	if err := writeFile(filepath.Join(containerMemoryCgroupDir, cgroupMaxMemoryFileName), maxMemoryB); err != nil {
+		return "", err
+	}
+	return containerMemoryCgroupDir, nil
+}
+
+func systemMaxMemoryB() (uint64, error) {
+	systemMaxMemFileContents, err := ioutil.ReadFile(filepath.Join(memoryCgroupRoot, cgroupMaxMemoryFileName))
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseUint(strings.TrimSpace(string(systemMaxMemFileContents)), 10, 64)
+}
+
+func writeFile(path string, contents interface{}) error {
+	file, err := os.OpenFile(path, os.O_WRONLY, 0700)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	fmt.Fprintln(file, contents)
+	return nil
 }
 
 func must(err error) {
