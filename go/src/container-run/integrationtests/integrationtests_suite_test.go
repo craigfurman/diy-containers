@@ -1,6 +1,7 @@
 package integrationtests
 
 import (
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -11,6 +12,11 @@ import (
 var containerRunBinPath string
 
 var _ = SynchronizedBeforeSuite(func() []byte {
+	externalBinPath := os.Getenv("DIY_CONTAINER_BIN_PATH")
+	if externalBinPath != "" {
+		return []byte(externalBinPath)
+	}
+
 	binPath, err := gexec.Build("container-run")
 	Expect(err).NotTo(HaveOccurred())
 	return []byte(binPath)
