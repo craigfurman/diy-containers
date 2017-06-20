@@ -5,101 +5,25 @@
   vars:
     downloads_dir: /tmp/downloads
   tasks:
-  - name: add apt repositories
-    apt_repository: repo={{ item }}
-    with_items:
-    - ppa:git-core/ppa
-    - ppa:neovim-ppa/stable
-
   - name: install apt packages
     apt: name={{ item }} state=latest update_cache=yes
     with_items:
     - build-essential
     - curl
     - debootstrap
-    - exuberant-ctags
-    - git
     - htop
-    - libncurses5-dev
-    - neovim
-    - python-dev
-    - python-pip
-    - python3-dev
-    - python3-pip
-    - ruby
-    - silversearcher-ag
     - tree
     - wget
-    - zsh
-    # For tmux
-    - libevent-dev
-
-  - name: install neovim pip package
-    pip: name=neovim executable=/usr/bin/pip
-
-  - name: install neovim pip3 package
-    pip: name=neovim executable=/usr/bin/pip3
-
-  - name: clone oh my zsh
-    git: repo=https://github.com/robbyrussell/oh-my-zsh.git dest=~/.oh-my-zsh
-
-  - name: set zsh as default shell
-    user: name=root shell=/bin/zsh
-
-  - name: copy zshrc
-    copy: src=vm/zshrc dest=~/.zshrc mode=0600 force=yes
-
-  - name: copy git config
-    copy: src=vm/gitconfig dest=~/.gitconfig mode=0600 force=yes
 
   - name: ensure downloads directory exists
     file: path={{downloads_dir}} state=directory
 
-  - name: download tmux
-    get_url: url=https://github.com/tmux/tmux/releases/download/2.3/tmux-2.3.tar.gz dest={{downloads_dir}}/tmux-2.3.tar.gz
-
-  - name: extract tmux
-    unarchive: copy=no src={{downloads_dir}}/tmux-2.3.tar.gz dest={{downloads_dir}} creates={{downloads_dir}}/tmux-2.3
-
-  - name: check tmux installed
-    command: tmux -V
-    register: tmux_version
-    failed_when: tmux_version.rc != 0 and tmux_version.rc != 127
-
-  - name: configure tmux
-    command: ./configure chdir={{downloads_dir}}/tmux-2.3
-    when: tmux_version.stdout != "tmux 2.3"
-
-  - name: compile tmux
-    make: chdir={{downloads_dir}}/tmux-2.3
-    when: tmux_version.stdout != "tmux 2.3"
-
-  - name: install tmux
-    make: target=install chdir={{downloads_dir}}/tmux-2.3
-    when: tmux_version.stdout != "tmux 2.3"
-
-  - name: copy tmux.conf
-    copy: src=vm/tmux.conf dest=~/.tmux.conf mode=0600 force=yes
-
   - name: download go
-    get_url: url=https://storage.googleapis.com/golang/go1.8.linux-amd64.tar.gz dest={{downloads_dir}}/go-1.8.tar.gz
+    get_url: url=https://storage.googleapis.com/golang/go1.8.3.linux-amd64.tar.gz dest={{downloads_dir}}/go.tar.gz
 
   - name: extract go
-    unarchive: copy=no src={{downloads_dir}}/go-1.8.tar.gz dest=/usr/local creates=/usr/local/go
+    unarchive: copy=no src={{downloads_dir}}/go.tar.gz dest=/usr/local creates=/usr/local/go
 
-  - name: ensure git-apps directory exists
-    file: path=~/git-apps state=directory
-
-  - name: checkout direnv
-    git: repo=https://github.com/direnv/direnv dest={{downloads_dir}}/direnv force=yes
-
-  - name: install direnv
-    make: target=install chdir={{downloads_dir}}/direnv
-    environment:
-      PATH: /usr/local/go/bin:{{ ansible_env.PATH }}
-
-  - name: checkout vim config
-    git: repo=https://github.com/luan/vimfiles dest=~/.vim
-
-  - name: install vim config
-    command: ~/.vim/update
+  - lineinfile:
+      path: ~/.bashrc
+      line: 'export PATH=/usr/local/go/bin:$PATH'
