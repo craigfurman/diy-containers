@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ ! -d ~/rootfs/jessie ]; then
-  mkdir -p ~/rootfs/jessie
-  debootstrap --include stress jessie ~/rootfs/jessie
+if [ ! -d ~/rootfs/stretch ]; then
+  mkdir -p ~/rootfs/stretch
+  debootstrap --include stress stretch ~/rootfs/stretch
 fi
 
 if ! which ginkgo >/dev/null 2>&1; then
@@ -13,4 +13,4 @@ if ! which ginkgo >/dev/null 2>&1; then
   )
 fi
 
-ginkgo -r -p -nodes 8 -randomizeAllSpecs -randomizeSuites $@
+ginkgo -r -p -nodes 8 -randomizeAllSpecs -randomizeSuites "$@"

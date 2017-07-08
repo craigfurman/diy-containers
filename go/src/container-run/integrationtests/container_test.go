@@ -13,14 +13,17 @@ import (
 
 var _ = Describe("containerising processes", func() {
 	It("runs the process in a UTS namespace", func() {
-		exitStatus, output, err := runCommandInContainer(true, 0, "/bin/bash", "-c", "hostname new-hostname && hostname")
+		exitStatus, output, err := runCommand("hostname", "ubuntu-zesty")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exitStatus).To(Equal(0))
+		exitStatus, output, err = runCommandInContainer(true, 0, "/bin/bash", "-c", "hostname new-hostname && hostname")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
 		Expect(output).To(Equal("new-hostname\n"))
 		exitStatus, output, err = runCommand("hostname")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
-		Expect(output).To(Equal("ubuntu-xenial\n"))
+		Expect(output).To(Equal("ubuntu-zesty\n"))
 	})
 
 	It("runs the process in a PID namespace", func() {
@@ -45,7 +48,7 @@ var _ = Describe("containerising processes", func() {
 		exitStatus, output, err := runCommandInContainer(true, 0, "/bin/cat", "/etc/os-release")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).To(Equal(0))
-		Expect(output).To(ContainSubstring("Debian GNU/Linux 8 (jessie)"))
+		Expect(output).To(ContainSubstring("Debian GNU/Linux 9 (stretch)"))
 	})
 
 	It("runs the process in a unique rootFS", func() {
@@ -67,7 +70,7 @@ var _ = Describe("containerising processes", func() {
 		exitStatus, output, err := runCommandInContainer(false, 0, "/bin/mknod", "/tmp/node", "b", "7", "0")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(exitStatus).NotTo(Equal(0))
-		Expect(output).To(ContainSubstring("mknod: '/tmp/node': Operation not permitted"))
+		Expect(output).To(ContainSubstring("mknod: /tmp/node: Operation not permitted"))
 	})
 
 	It("can restrict the max memory of a process", func() {
@@ -96,12 +99,12 @@ func runCommand(exe string, args ...string) (int, string, error) {
 }
 
 func runCommandInContainer(privileged bool, maxMemoryMB int, containerCmd ...string) (int, string, error) {
-	args := []string{"-rootFS", "/root/rootfs/jessie"}
+	args := []string{"--rootFS", "/root/rootfs/stretch"}
 	if privileged {
-		args = append(args, "-privileged")
+		args = append(args, "--privileged")
 	}
 	if maxMemoryMB != 0 {
-		args = append(args, "-maxMemoryMB", fmt.Sprintf("%d", maxMemoryMB))
+		args = append(args, "--maxMemoryMB", fmt.Sprintf("%d", maxMemoryMB))
 	}
 	args = append(args, containerCmd...)
 	return runCommand(containerRunBinPath, args...)
